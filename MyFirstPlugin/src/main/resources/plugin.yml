@@ -12,3 +12,12 @@ commands:
   gethammer:
     description: Gibt dir Thors Hammer.
     permission: meinplugin.hammer
+  dome:
+    description: Steuert die PvP-Arena
+    usage: /dome <start|join|stop>
+  permissions:
+    myfirstplugin.dome.admin:
+      description: PvP-Runden verwalten
+      default: op
+  zonemap:
+    description: Gibt dir die Zonen-Karte.
