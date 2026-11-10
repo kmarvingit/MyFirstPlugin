@@ -1,0 +1,11 @@
+name: MyFirstPlugin
+version: '${version}'
+
+main: me.example.myFirstPlugin.MyFirstPlugin
+api-version: '26.3'
+load: POSTWORLD
+
+commands:
+  heal:
+    description: Heilt den Spieler
+    usage: /heal

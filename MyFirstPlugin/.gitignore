@@ -1,0 +1,53 @@
+# ==========================================
+# Gradle (Build-Dateien & Cache)
+# ==========================================
+.gradle/
+build/
+out/
+.gradle-test-kit/
+
+# ==========================================
+# IntelliJ IDEA & IDEs
+# ==========================================
+.idea/
+*.iml
+*.iws
+*.ipr
+bin/
+
+# Eclipse / NetBeans
+.settings/
+.classpath
+.project
+
+# ==========================================
+# Minecraft Server Run-Umgebung
+# ==========================================
+# Schließt den gesamten Testserver-Ordner aus
+run/
+server/
+
+# Server-Dateien & Logs (falls ausserhalb von run/ gestartet)
+logs/
+crash-reports/
+world/
+world_nether/
+world_the_end/
+usercache.json
+banned-ips.json
+banned-players.json
+ops.json
+whitelist.json
+eula.txt
+server.properties
+
+# Generierte JAR-Dateien ausschließen (außer dem Gradle Wrapper)
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# ==========================================
+# Betriebssysteme
+# ==========================================
+.DS_Store
+Thumbs.db
+*.swp
