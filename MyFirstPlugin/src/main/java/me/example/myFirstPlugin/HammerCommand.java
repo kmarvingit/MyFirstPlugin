@@ -4,7 +4,9 @@ import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
@@ -31,6 +33,10 @@ public class HammerCommand implements CommandExecutor {
     if (meta != null) {
       // 3. Den individuellen Namen setzen (§6 = Goldene Farbe)
       meta.setDisplayName("§6Thors Hammer");
+
+      meta.addEnchant(Enchantment.UNBREAKING, 1, true);
+
+      meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
 
       // 4. Die Beschreibung (Lore) als zeilenweise Liste erstellen
       List<String> lore = new ArrayList<>();

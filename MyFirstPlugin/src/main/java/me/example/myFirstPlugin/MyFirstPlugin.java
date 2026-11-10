@@ -19,6 +19,10 @@ public final class MyFirstPlugin extends JavaPlugin implements Listener {
 
     // Verknüpft den Befehl "heal" mit unserer neuen Klasse
     getCommand("heal").setExecutor(new HealCommand());
+
+    getCommand("gethammer").setExecutor(new HammerCommand());
+
+
     getLogger().info("Plugin gestartet!");
   }
 

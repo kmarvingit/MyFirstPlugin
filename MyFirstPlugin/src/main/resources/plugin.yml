@@ -9,3 +9,6 @@ commands:
   heal:
     description: Heilt den Spieler
     usage: /heal
+  gethammer:
+    description: Gibt dir Thors Hammer.
+    permission: meinplugin.hammer
