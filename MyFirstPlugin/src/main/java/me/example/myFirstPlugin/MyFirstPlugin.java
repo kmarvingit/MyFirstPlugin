@@ -1,10 +1,10 @@
 package me.example.myFirstPlugin;
 
+import me.example.myFirstPlugin.Dome.DomeCommand;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRules;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -28,7 +28,7 @@ public final class MyFirstPlugin extends JavaPlugin implements Listener {
 
     if (pvpWorld != null) {
       pvpWorld.setGameRule(GameRules.PVP, true);
-      getCommand("dome").setExecutor(new DomeCommand(pvpWorld));
+      getCommand("dome").setExecutor(new DomeCommand(this, pvpWorld));
       getLogger().info("PvP-Arena wurde geladen!");
     }
 

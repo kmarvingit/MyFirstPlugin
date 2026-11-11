@@ -1,20 +1,29 @@
-package me.example.myFirstPlugin;
+package me.example.myFirstPlugin.Dome;
 
 
-
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldBorder;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 public class DomeCommand implements CommandExecutor {
 
+  private final JavaPlugin plugin;
   private final World world;
-  private boolean running = false;
 
-  public DomeCommand(World world) {
+  private boolean running = false;
+  private BukkitTask finalTask;
+
+  private static final long DURATION = 20L * 60 * 1;
+
+  public DomeCommand(JavaPlugin plugin, World world) {
+    this.plugin = plugin;
     this.world = world;
   }
 
@@ -37,27 +46,56 @@ public class DomeCommand implements CommandExecutor {
         return true;
       }
 
+      if (running) {
+        sender.sendMessage("§cDie Runde läuft bereits!");
+        return true;
+      }
+
+      Location center = world.getSpawnLocation();
       WorldBorder border = world.getWorldBorder();
 
-      // Mittelpunkt der Arena
-      border.setCenter(world.getSpawnLocation());
+      // Mittelpunkt exakt auf Blockraster ausrichten
+      border.setCenter(
+          center.getBlockX(),
+          center.getBlockZ()
+      );
 
-      // Anfangsgröße: 400 x 400 Blöcke
       border.setSize(400.0);
-
-      // Verkleinerung auf 20 x 20 in 10 Minuten
-      border.changeSize(20.0, 20L * 60 * 2);
-
-      // Schaden außerhalb der sicheren Zone
       border.setDamageBuffer(0.0);
       border.setDamageAmount(1.0);
-
-      // Warnung in der Nähe der Grenze
       border.setWarningDistance(10);
 
       running = true;
 
-      sender.sendMessage("§aDome PvP wurde gestartet!");
+      // WorldBorder schrumpft 10 Minuten lang
+      border.changeSize(20.0, DURATION);
+
+      // Nach 10 Minuten Final-Arena erzeugen
+      finalTask = Bukkit.getScheduler().runTaskLater(
+          plugin,
+          () -> {
+            if (!running) {
+              return;
+            }
+
+
+            FinalArena.createCircle(world, center);
+
+
+
+            for (Player player : world.getPlayers()) {
+              player.teleport(new Location(world, center.x(), center.y() + 101, center.z()));
+              player.sendTitle(
+                  "§6FINAL BATTLE!",
+                  "§cKämpft bis zum letzten Spieler!",
+                  10, 70, 20
+              );
+            }
+          },
+          DURATION
+      );
+
+      sender.sendMessage("§aDome PvP gestartet!");
       return true;
     }
 
@@ -85,10 +123,16 @@ public class DomeCommand implements CommandExecutor {
         return true;
       }
 
-      // Schrumpfen beenden
+      running = false;
+
+      // Geplantes Finale abbrechen
+      if (finalTask != null) {
+        finalTask.cancel();
+        finalTask = null;
+      }
+
       world.getWorldBorder().setSize(400.0);
 
-      running = false;
       sender.sendMessage("§cPvP-Runde beendet!");
       return true;
     }
@@ -97,4 +141,3 @@ public class DomeCommand implements CommandExecutor {
     return true;
   }
 }
-
