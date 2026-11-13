@@ -26,6 +26,8 @@ public class DomeCommand implements CommandExecutor {
 
   private boolean running = false;
   private BukkitTask finalTask;
+  private List<BukkitTask> shrinkTasks = new ArrayList<>();
+
 
   private static final long DURATION = 20L * 60 * 1;
 
@@ -119,9 +121,36 @@ public class DomeCommand implements CommandExecutor {
       running = true;
 
       // WorldBorder schrumpft DURATION lang
-      border.changeSize(20.0, DURATION);
+      for (int i = 1; i <= 5; i++) {
+        final int phase = i;
+        shrinkTasks.add(
+        Bukkit.getScheduler().runTaskLater(
+            plugin,
+            () -> {
+              if (!running) {
+                return;
+              }
 
-      // Nach 10 Minuten Final-Arena erzeugen
+
+              border.changeSize(400 - ((360 / 5) * phase), DURATION / 5);
+
+                world.getPlayers().stream().forEach(player -> player.sendTitle(
+                    "§6Map eingegrenzt",
+                    "§cKämpft bis zum letzten Spieler!",
+                    10, 70, 20
+                ));
+
+
+
+            }, DURATION / 5 * (phase - 1)
+        )
+        );
+
+
+
+
+      }
+
       finalTask = Bukkit.getScheduler().runTaskLater(
           plugin,
           () -> {
@@ -129,12 +158,18 @@ public class DomeCommand implements CommandExecutor {
               return;
             }
 
+            border.changeSize(20, 0);
 
             DomeFinalArena.createCircle(world, center);
 
-
             for (Player player : world.getPlayers()) {
-              player.teleport(new Location(world, center.x(), center.y() + 101, center.z()));
+              player.teleport(new Location(
+                  world,
+                  center.getX(),
+                  center.getY() + 101,
+                  center.getZ()
+              ));
+
               player.sendTitle(
                   "§6FINAL BATTLE!",
                   "§cKämpft bis zum letzten Spieler!",
@@ -144,6 +179,7 @@ public class DomeCommand implements CommandExecutor {
           },
           DURATION
       );
+
 
       sender.sendMessage("§aDome PvP gestartet!");
       return true;
@@ -192,16 +228,15 @@ public class DomeCommand implements CommandExecutor {
       }
 
       if (sender instanceof Player) {
-          Player player = (Player) sender;
-          if(world.getPlayers().contains(player) && player.isOnline()){
-            List<UUID> list = participants.stream().filter(participantId -> Bukkit.getPlayer(participantId).equals(sender)).toList();
-            participants.remove(list.get(0));
-            World hub = Bukkit.getWorld("world");
-            player.teleport(hub.getSpawnLocation());
-          }else{
-            sender.sendMessage("Sender ist nicht mehr online/ nicht Teilnehmer");
-          }
-
+        Player player = (Player) sender;
+        if (world.getPlayers().contains(player) && player.isOnline()) {
+          List<UUID> list = participants.stream().filter(participantId -> Bukkit.getPlayer(participantId).equals(sender)).toList();
+          participants.remove(list.get(0));
+          World hub = Bukkit.getWorld("world");
+          player.teleport(hub.getSpawnLocation());
+        } else {
+          sender.sendMessage("Sender ist nicht mehr online/ nicht Teilnehmer");
+        }
 
 
       } else {
@@ -243,6 +278,10 @@ public class DomeCommand implements CommandExecutor {
       finalTask.cancel();
       finalTask = null;
     }
+
+    shrinkTasks.forEach(shrinkTask -> shrinkTask.cancel());
+    shrinkTasks.clear();
+
 
     world.getWorldBorder().setSize(400.0);
 
