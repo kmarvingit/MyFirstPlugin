@@ -4,7 +4,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 
-public class FinalArena {
+public class DomeFinalArena {
 
 
   public static void createCircle(World world, Location center) {
