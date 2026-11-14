@@ -3,7 +3,7 @@ package me.example.myFirstPlugin.enums;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Random;
 
 public enum CombatLoot {
 
@@ -120,8 +120,9 @@ public enum CombatLoot {
   }
 
   public ItemStack createItemStack() {
-    int amount = ThreadLocalRandom.current()
-        .nextInt(minAmount, maxAmount + 1);
+    Random random = new Random();
+
+    int amount = random.nextInt(minAmount, maxAmount + 1);
 
     return new ItemStack(material, amount);
   }

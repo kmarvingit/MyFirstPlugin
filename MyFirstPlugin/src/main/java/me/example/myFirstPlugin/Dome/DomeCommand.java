@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -89,115 +90,128 @@ public class DomeCommand implements CommandExecutor {
     return alive;
   }
 
+  private final Set<Location> spawnedChests = new HashSet<>();
 
   private void spawnLootChest(Player player, int phase) {
     ThreadLocalRandom random = ThreadLocalRandom.current();
+    Location playerPosition = player.getLocation();
 
-    for (int attempt = 0; attempt < 30; attempt++) {
-      Location position = player.getLocation();
+    // Spaetere Phasen: Kisten erscheinen naeher beim Spieler.
+    int radius = Math.max(15, Math.min(400, 100) - (Math.min(400, 100) / (5) * phase));
 
-      int randomX = (int) (Math.random() * (20 - ((18 / 5) * phase)) / getAliveParticipants().size());
-      int signX = (int) (Math.random() * 2);
-      randomX = signX == 0 ? randomX * -1 : randomX;
-      int totalX = (int) (position.x() + randomX);
+    for (int attempt = 0; attempt < 300; attempt++) {
+      int x = playerPosition.getBlockX() + random.nextInt(-radius, radius + 1);
+      int z = playerPosition.getBlockZ() + random.nextInt(-radius, radius + 1);
 
-
-      int randomZ = (int) (Math.random() * (20 - ((18 / 5) * phase)) / getAliveParticipants().size());
-      int signZ = (int) (Math.random() * 2);
-      randomZ = signZ == 0 ? randomZ * -1 : randomZ;
-      int totalZ = (int) (position.z() + randomZ);
-
-      int totalY = world.getHighestBlockYAt(
-          totalX, totalZ, HeightMap.MOTION_BLOCKING_NO_LEAVES
-      );
+      // Block über dem höchsten Block
+      int y = world.getHighestBlockYAt(
+          x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES) + 1;
 
 
-      if (totalY <= world.getMinHeight()
-          || totalY >= world.getMaxHeight() - 2) {
+      if (!world.getBlockAt(x, y, z).getType().isAir()) {
         continue;
       }
 
-
-      //Block unter der Kiste
-      Block ground = world.getBlockAt(totalX, totalY - 1, totalZ);
-      //Kistenblock
-      Block block = world.getBlockAt(totalX, totalY, totalZ);
-
-
-      if (!ground.getType().isSolid()
-          || ground.isLiquid()
-          || Tag.LOGS.isTagged(ground.getType())) {
+      if (y <= world.getMinHeight() || y >= world.getMaxHeight() - 1) {
         continue;
       }
 
-
-      // dh mindestens ein block darüber ist noch luft
-      if (!block.getType().isAir()
-          || !block.getRelative(0, 1, 0).getType().isAir()) {
+      if (!isChestPositionSuitable(x, y, z)) {
         continue;
       }
 
-
-      // position = new Location(position.getWorld(), position.x() + randomX, position.z() + randomZ, player.getY());
-
-
-      boolean nearBlocks = false;
-
-      boolean blocked = false;
-
-      for (int dx = -1; dx <= 1 && !blocked; dx++) {
-        for (int dz = -1; dz <= 1 && !blocked; dz++) {
-          for (int dy = 0; dy <= 2; dy++) {
-            if(dx==0 && dz == 0 && dy == 0){
-              continue;
-            }
-            Block nearbyBlock = world.getBlockAt(totalX + dx, totalY + dy, totalZ + dz);
-            if(!nearbyBlock.getType().isAir()){
-              blocked = true;
-              break;
-            }
-
-
-          }
-
-        }
-      }
-
-      if (blocked) {
-        continue;
+      Block block = world.getBlockAt(x, y, z);
+      for (Player playerInside : world.getPlayers()) {
+        plugin.getLogger().info("Spieler teleportiert");
+        playerInside.teleport(new Location(world, x - 3, y + 2, z - 3));
       }
 
 
+      block.setType(Material.CHEST);
+      Chest chest = (Chest) block.getState();
 
-      Block chestBlock = world.getBlockAt(block.getLocation());
-      chestBlock.setType(Material.CHEST);
-
-
-      Chest chest = (Chest) chestBlock.getState();
-
-      List<CombatLoot> loot = new ArrayList<>(
-          Arrays.asList(CombatLoot.values())
-      );
-
+      // 1 bis 4 verschiedene zufaellige Kampfitems.
+      List<CombatLoot> loot = new ArrayList<>(Arrays.asList(CombatLoot.values()));
       Collections.shuffle(loot);
-
-      int count = ThreadLocalRandom.current().nextInt(1, 5);
+      int count = random.nextInt(1, Math.min(4, loot.size()) + 1);
 
       for (int i = 0; i < count; i++) {
-        chest.getBlockInventory().addItem(
-            loot.get(i).createItemStack()
-        );
+        Random randomGen = new Random();
+        Integer randomNumb;
+        do {
+          randomNumb = randomGen.nextInt(0, chest.getBlockInventory().getSize());
+        } while (chest.getBlockInventory().getItem(randomNumb) != null);
+
+        chest.getBlockInventory().setItem(randomNumb, loot.get(i).createItemStack());
       }
 
-      world.strikeLightningEffect(
-          chestBlock.getLocation()
-      );
-
-
-
-
+      spawnedChests.add(block.getLocation());
+      //world.strikeLightningEffect(block.getLocation().add(0.5, 0, 0.5));
+      return; // Erfolgreich: nur eine Kiste pro Spieler/Phase.
     }
+
+    plugin.getLogger().info("Kein geeigneter Platz fuer eine Loot-Kiste bei "
+        + player.getName() + " (Phase " + phase + ") gefunden.");
   }
+
+  private boolean isChestPositionSuitable(int x, int y, int z) {
+    Block chestBlock = world.getBlockAt(x, y, z);
+    Block ground = world.getBlockAt(x, y - 1, z);
+
+    // Kiste muss auf festem Boden stehen, nicht auf einem Baum.
+    Material groundType = ground.getType();
+    if (!groundType.isSolid()
+        || ground.isLiquid()
+        || Tag.LOGS.isTagged(groundType)
+        || Tag.LEAVES.isTagged(groundType)) {
+      return false;
+    }
+
+    // An der Kistenposition und direkt darueber muss Luft sein.
+    if (!chestBlock.getType().isAir()
+        || !chestBlock.getRelative(0, 1, 0).getType().isAir()) {
+      return false;
+    }
+
+    WorldBorder border = world.getWorldBorder();
+
+    double halfSize = border.getSize() / 2.0;
+
+    double minX = border.getCenter().getX() - halfSize;
+    double maxX = border.getCenter().getX() + halfSize;
+
+    double minZ = border.getCenter().getZ() - halfSize;
+    double maxZ = border.getCenter().getZ() + halfSize;
+
+    //muss genau reinpassen
+    if (x < minX || x + 1 > maxX
+        || z < minZ || z + 1 > maxZ) {
+      return false;
+    }
+
+
+    // Nur die vier direkten Nachbarn, statt eines 3x3x3-Luftwuerfels.
+    int[][] directions = {
+        {1, 0}, {-1, 0}, {0, 1}, {0, -1}
+    };
+    int freeSides = 0;
+
+    // iterieren über {1,0}, {-1,0} usw; passable und block darüber
+    for (int[] direction : directions) {
+      Block side = world.getBlockAt(
+          x + direction[0], y, z + direction[1]);
+      Block aboveSide = side.getRelative(0, 1, 0);
+
+      // Auch Gras und Blumen sind passierbar; Wasser zaehlt nicht, obwohl auch passable
+      if (side.isPassable() && !side.isLiquid()
+          && aboveSide.isPassable() && !aboveSide.isLiquid()) {
+        freeSides++;
+      }
+    }
+
+    return freeSides >= 3;
+  }
+
 
   @Override
   public boolean onCommand(
@@ -262,7 +276,7 @@ public class DomeCommand implements CommandExecutor {
                     ));
                     // now random event occurs that
                     for (Player player : getAliveParticipants()) {
-                        spawnLootChest(player, phase);
+                      spawnLootChest(player, phase);
 
                     }
                   }
@@ -407,8 +421,17 @@ public class DomeCommand implements CommandExecutor {
     shrinkTasks.clear();
 
 
-    this.eliminated.clear();
-    this.participants.clear();
+    for (Location location : spawnedChests) {
+      Block block = location.getBlock();
+      if (block.getType() == Material.CHEST) {
+        block.setType(Material.AIR);
+      }
+    }
+
+
+    spawnedChests.clear();
+    eliminated.clear();
+    participants.clear();
 
     world.getWorldBorder().setSize(400.0);
 
