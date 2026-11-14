@@ -37,14 +37,13 @@ public final class MyFirstPlugin extends JavaPlugin implements Listener {
       pvpWorld.setGameRule(GameRules.PVP, true);
 
       // 4. DomeCommand erstellen
-      DomeCommand domeCommand = new DomeCommand(this, pvpWorld);
+      DomeCommand domeCommand = new DomeCommand(this);
 
       // 5. DomeCommand registrieren
       getCommand("dome").setExecutor(domeCommand);
 
       // 6. DomeListener mit derselben Instanz registrieren
       DomeListener domeListener = new DomeListener(
-          pvpWorld,
           domeCommand
       );
 

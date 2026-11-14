@@ -10,6 +10,7 @@ import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.WorldBorder;
+import org.bukkit.WorldCreator;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
 import org.bukkit.command.Command;
@@ -20,6 +21,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
+import javax.print.attribute.standard.Destination;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -33,7 +35,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class DomeCommand implements CommandExecutor {
 
   private final JavaPlugin plugin;
-  private final World world;
+  private World world;
 
   private boolean running = false;
   private BukkitTask finalTask;
@@ -46,10 +48,8 @@ public class DomeCommand implements CommandExecutor {
   private final Set<UUID> eliminated = new HashSet<>();
 
 
-  public DomeCommand(JavaPlugin plugin, World world) {
+  public DomeCommand(JavaPlugin plugin) {
     this.plugin = plugin;
-    this.world = world;
-
   }
 
   public boolean isRunning() {
@@ -212,6 +212,10 @@ public class DomeCommand implements CommandExecutor {
     return freeSides >= 3;
   }
 
+  public World getArenaWorld() {
+    return world;
+  }
+
 
   @Override
   public boolean onCommand(
@@ -236,6 +240,25 @@ public class DomeCommand implements CommandExecutor {
         sender.sendMessage("§cDie Runde läuft bereits!");
         return true;
       }
+
+      if (world != null) {
+        sender.sendMessage("§cDie vorherige Arena ist noch geladen!");
+        return true;
+      }
+
+// Jede Runde erhält einen neuen Namen
+      String worldName = "dome_" + UUID.randomUUID();
+
+// Neuen zufälligen Seed erzeugen
+      long seed = ThreadLocalRandom.current().nextLong();
+
+      WorldCreator creator = new WorldCreator(worldName);
+      creator.seed(seed);
+      creator.environment(World.Environment.NORMAL);
+
+// Neue Welt generieren
+      world = Bukkit.createWorld(creator);
+
 
       Location center = world.getSpawnLocation();
       WorldBorder border = world.getWorldBorder();
@@ -397,6 +420,7 @@ public class DomeCommand implements CommandExecutor {
       }
 
 
+
       endRound(null);
 
       sender.sendMessage("§cPvP-Runde beendet!");
@@ -407,8 +431,25 @@ public class DomeCommand implements CommandExecutor {
     return true;
   }
 
+  public void tryUnloadArena() {
+    if (running || world == null) return;
+
+    // Noch Spieler in der Arena?
+    if (!world.getPlayers().isEmpty()) return;
+
+    if (Bukkit.unloadWorld(world, false)) {
+      world = null;
+      plugin.getLogger().info("Arena entladen!");
+    } else {
+      plugin.getLogger().warning("Entladen fehlgeschlagen!");
+    }
+  }
+
+
   public void endRound(Player winner) {
     if (!running) return;
+
+    world.getPlayers().stream().forEach(player -> player.teleport(getLobby().getSpawnLocation()));
 
     running = false;
 
@@ -434,6 +475,16 @@ public class DomeCommand implements CommandExecutor {
     participants.clear();
 
     world.getWorldBorder().setSize(400.0);
+
+    Bukkit.getScheduler().runTask(plugin,
+        () -> {if (Bukkit.unloadWorld(world, false)) {
+          world = null;
+        } else {
+          plugin.getLogger().warning("Arena konnte nicht entladen werden!");
+        }});
+
+
+
 
     if (winner != null) {
       Bukkit.broadcastMessage(
