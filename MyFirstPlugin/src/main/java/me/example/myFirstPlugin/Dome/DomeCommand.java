@@ -1,23 +1,33 @@
 package me.example.myFirstPlugin.Dome;
 
 
+import me.example.myFirstPlugin.enums.CombatLoot;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.WorldBorder;
+import org.bukkit.block.Block;
+import org.bukkit.block.Chest;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class DomeCommand implements CommandExecutor {
 
@@ -79,6 +89,116 @@ public class DomeCommand implements CommandExecutor {
     return alive;
   }
 
+
+  private void spawnLootChest(Player player, int phase) {
+    ThreadLocalRandom random = ThreadLocalRandom.current();
+
+    for (int attempt = 0; attempt < 30; attempt++) {
+      Location position = player.getLocation();
+
+      int randomX = (int) (Math.random() * (20 - ((18 / 5) * phase)) / getAliveParticipants().size());
+      int signX = (int) (Math.random() * 2);
+      randomX = signX == 0 ? randomX * -1 : randomX;
+      int totalX = (int) (position.x() + randomX);
+
+
+      int randomZ = (int) (Math.random() * (20 - ((18 / 5) * phase)) / getAliveParticipants().size());
+      int signZ = (int) (Math.random() * 2);
+      randomZ = signZ == 0 ? randomZ * -1 : randomZ;
+      int totalZ = (int) (position.z() + randomZ);
+
+      int totalY = world.getHighestBlockYAt(
+          totalX, totalZ, HeightMap.MOTION_BLOCKING_NO_LEAVES
+      );
+
+
+      if (totalY <= world.getMinHeight()
+          || totalY >= world.getMaxHeight() - 2) {
+        continue;
+      }
+
+
+      //Block unter der Kiste
+      Block ground = world.getBlockAt(totalX, totalY - 1, totalZ);
+      //Kistenblock
+      Block block = world.getBlockAt(totalX, totalY, totalZ);
+
+
+      if (!ground.getType().isSolid()
+          || ground.isLiquid()
+          || Tag.LOGS.isTagged(ground.getType())) {
+        continue;
+      }
+
+
+      // dh mindestens ein block darüber ist noch luft
+      if (!block.getType().isAir()
+          || !block.getRelative(0, 1, 0).getType().isAir()) {
+        continue;
+      }
+
+
+      // position = new Location(position.getWorld(), position.x() + randomX, position.z() + randomZ, player.getY());
+
+
+      boolean nearBlocks = false;
+
+      boolean blocked = false;
+
+      for (int dx = -1; dx <= 1 && !blocked; dx++) {
+        for (int dz = -1; dz <= 1 && !blocked; dz++) {
+          for (int dy = 0; dy <= 2; dy++) {
+            if(dx==0 && dz == 0 && dy == 0){
+              continue;
+            }
+            Block nearbyBlock = world.getBlockAt(totalX + dx, totalY + dy, totalZ + dz);
+            if(!nearbyBlock.getType().isAir()){
+              blocked = true;
+              break;
+            }
+
+
+          }
+
+        }
+      }
+
+      if (blocked) {
+        continue;
+      }
+
+
+
+      Block chestBlock = world.getBlockAt(block.getLocation());
+      chestBlock.setType(Material.CHEST);
+
+
+      Chest chest = (Chest) chestBlock.getState();
+
+      List<CombatLoot> loot = new ArrayList<>(
+          Arrays.asList(CombatLoot.values())
+      );
+
+      Collections.shuffle(loot);
+
+      int count = ThreadLocalRandom.current().nextInt(1, 5);
+
+      for (int i = 0; i < count; i++) {
+        chest.getBlockInventory().addItem(
+            loot.get(i).createItemStack()
+        );
+      }
+
+      world.strikeLightningEffect(
+          chestBlock.getLocation()
+      );
+
+
+
+
+    }
+  }
+
   @Override
   public boolean onCommand(
       CommandSender sender,
@@ -124,29 +244,33 @@ public class DomeCommand implements CommandExecutor {
       for (int i = 1; i <= 5; i++) {
         final int phase = i;
         shrinkTasks.add(
-        Bukkit.getScheduler().runTaskLater(
-            plugin,
-            () -> {
-              if (!running) {
-                return;
-              }
+            Bukkit.getScheduler().runTaskLater(
+                plugin,
+                () -> {
+                  if (!running) {
+                    return;
+                  }
 
 
-              border.changeSize(400 - ((360 / 5) * phase), DURATION / 5);
+                  border.changeSize(400 - ((360 / 5) * phase), DURATION / 5);
 
-                world.getPlayers().stream().forEach(player -> player.sendTitle(
-                    "§6Map eingegrenzt",
-                    "§cKämpft bis zum letzten Spieler!",
-                    10, 70, 20
-                ));
+                  if (phase != 1) {
+                    world.getPlayers().stream().forEach(player -> player.sendTitle(
+                        "§6Map eingegrenzt",
+                        "§cKämpft bis zum letzten Spieler!",
+                        10, 70, 20
+                    ));
+                    // now random event occurs that
+                    for (Player player : getAliveParticipants()) {
+                        spawnLootChest(player, phase);
+
+                    }
+                  }
 
 
-
-            }, DURATION / 5 * (phase - 1)
-        )
+                }, DURATION / 5 * (phase - 1)
+            )
         );
-
-
 
 
       }
@@ -282,6 +406,9 @@ public class DomeCommand implements CommandExecutor {
     shrinkTasks.forEach(shrinkTask -> shrinkTask.cancel());
     shrinkTasks.clear();
 
+
+    this.eliminated.clear();
+    this.participants.clear();
 
     world.getWorldBorder().setSize(400.0);
 
