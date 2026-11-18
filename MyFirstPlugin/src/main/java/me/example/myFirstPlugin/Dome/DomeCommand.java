@@ -25,8 +25,11 @@ import javax.print.attribute.standard.Destination;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -42,7 +45,7 @@ public class DomeCommand implements CommandExecutor {
   private List<BukkitTask> shrinkTasks = new ArrayList<>();
 
 
-  private static final long DURATION = 20L * 60 * 1;
+  private static final long DURATION = 20L * 60 * 100;
 
   private final Set<UUID> participants = new HashSet<>();
   private final Set<UUID> eliminated = new HashSet<>();
@@ -93,8 +96,83 @@ public class DomeCommand implements CommandExecutor {
   private final Set<Location> spawnedChests = new HashSet<>();
 
 
+  public boolean coversAccessible(Location center, int radius, int baseY) {
+    World world = center.getWorld();
 
+    int centerX = center.getBlockX();
+    int centerZ = center.getBlockZ();
 
+    int numberOfWalkableSides = 0;
+
+    // 0 = Norden, 1 = Süden, 2 = Westen, 3 = Osten
+    for (int side = 0; side < 4; side++) {
+
+      int numberOfWalkableBlocks = 0;
+      int totalBlocks = 2 * radius + 1;
+
+      for (int i = -radius; i <= radius; i++) {
+
+        int x;
+        int z;
+
+        // north coordinate is negative (z)
+        switch (side) {
+          case 0 -> { // North
+            x = centerX + i;
+            z = centerZ - radius - 1;
+          }
+          case 1 -> { // South
+            x = centerX + i;
+            z = centerZ + radius + 1;
+          }
+          case 2 -> { // West
+            x = centerX - radius - 1;
+            z = centerZ + i;
+          }
+          default -> { // East
+            x = centerX + radius + 1;
+            z = centerZ + i;
+          }
+        }
+
+        int groundY = world.getHighestBlockYAt(
+            x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES
+        );
+
+        int diff = groundY - baseY;
+
+        // maximum: 3 blocks (bottom); 1 block (top)
+        if (diff < -3 || diff > 1) {
+          continue;
+        }
+
+        Block ground = world.getBlockAt(x, groundY, z);
+        Block feet = world.getBlockAt(x, groundY + 1, z);
+        Block head = world.getBlockAt(x, groundY + 2, z);
+
+        if (ground.getType().isSolid()
+            && feet.isPassable()
+            && head.isPassable()
+            && !feet.isLiquid()
+            && !head.isLiquid()) {
+          numberOfWalkableBlocks++;
+        }
+      }
+
+      double percentage =
+          (double) numberOfWalkableBlocks / totalBlocks;
+
+      if (percentage >= 0.3) {
+        numberOfWalkableSides++;
+      }
+    }
+
+    return numberOfWalkableSides >= 2;
+  }
+
+  /*
+  tries at baseY
+   */
   private void flattenArea(World world, Location center, int radius, int baseY) {
     int centerX = center.getBlockX();
     int centerZ = center.getBlockZ();
@@ -102,12 +180,6 @@ public class DomeCommand implements CommandExecutor {
     for (int x = centerX - radius; x <= centerX + radius; x++) {
       for (int z = centerZ - radius; z <= centerZ + radius; z++) {
 
-
-        int dx = x - centerX;
-        int dz = z - centerZ;
-        if (dx * dx + dz * dz > radius * radius) {
-          continue;
-        }
 
         int highestY = world.getHighestBlockYAt(
             x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES
@@ -130,7 +202,10 @@ public class DomeCommand implements CommandExecutor {
         // Oberfläche setzen
         world.getBlockAt(x, baseY - 2, z).setType(Material.DIRT, false);
         world.getBlockAt(x, baseY - 1, z).setType(Material.DIRT, false);
+
+
         world.getBlockAt(x, baseY, z).setType(Material.GRASS_BLOCK, false);
+
 
         // bisschen Luftraum freiräumen
         for (int y = baseY + 1; y <= baseY + 300; y++) {
@@ -138,9 +213,10 @@ public class DomeCommand implements CommandExecutor {
         }
       }
     }
+
+
+    DomeFinalArena.createCircle(new Location(world, center.x(), baseY, center.z()));
   }
-
-
 
 
   private void spawnLootChest(Player player, int phase) {
@@ -298,43 +374,54 @@ public class DomeCommand implements CommandExecutor {
       }
 
 // Jede Runde erhält einen neuen Namen
-      String worldName = "dome_" + UUID.randomUUID();
+
 
 // Neuen zufälligen Seed erzeugen
-      long seed = ThreadLocalRandom.current().nextLong();
-
-      WorldCreator creator = new WorldCreator(worldName);
-      creator.seed(seed);
-      creator.environment(World.Environment.NORMAL);
-
-// Neue Welt generieren
-      world = Bukkit.createWorld(creator);
+      WorldCreator creator;
+      int baseY;
+      boolean foundWorld = false;
 
 
-      Location center = world.getSpawnLocation();
+      Map<World, Integer> attemptedWorldsMap = new HashMap<>();
+      do {
 
+          String worldName = "dome_" + UUID.randomUUID();
+          long seed = ThreadLocalRandom.current().nextLong();
+          creator = new WorldCreator(worldName);
+          creator.seed(seed);
+          creator.environment(World.Environment.NORMAL);
+          world = creator.createWorld();
+          baseY =  world.getHighestBlockYAt(
+              world.getSpawnLocation().getBlockX(),
+              world.getSpawnLocation().getBlockZ(),
+              HeightMap.MOTION_BLOCKING_NO_LEAVES
+          );
 
-      int baseY = world.getHighestBlockYAt(
-          center.getBlockX(),
-          center.getBlockZ(),
+          foundWorld = this.coversAccessible(world.getSpawnLocation(), 40, baseY);
+          if(!foundWorld){
+            Bukkit.unloadWorld(worldName, false);
+          }
+
+      } while (!foundWorld);
+
+      final World finalWorld = world;
+      baseY = world.getHighestBlockYAt(
+          world.getSpawnLocation().getBlockX(),
+          world.getSpawnLocation().getBlockZ(),
           HeightMap.MOTION_BLOCKING_NO_LEAVES
       );
 
-      flattenArea(world, center, 20, baseY);
+      flattenArea(finalWorld, world.getSpawnLocation(), 40, baseY);
 
-// Spawn evtl. neu setzen
-      world.setSpawnLocation(center.getBlockX(), baseY + 1, center.getBlockZ());
-
-
-
+      world.setSpawnLocation(world.getSpawnLocation().getBlockX(), baseY + 1, world.getSpawnLocation().getBlockZ());
 
 
       WorldBorder border = world.getWorldBorder();
 
       // Mittelpunkt exakt auf Blockraster ausrichten
       border.setCenter(
-          center.getBlockX(),
-          center.getBlockZ()
+          world.getSpawnLocation().getBlockX(),
+          world.getSpawnLocation().getBlockZ()
       );
 
       border.setSize(400.0);
@@ -360,7 +447,7 @@ public class DomeCommand implements CommandExecutor {
                   border.changeSize(400 - ((360 / 5) * phase), DURATION / 5);
 
                   if (phase != 1) {
-                    world.getPlayers().stream().forEach(player -> player.sendTitle(
+                    finalWorld.getPlayers().stream().forEach(player -> player.sendTitle(
                         "§6Map eingegrenzt",
                         "§cKämpft bis zum letzten Spieler!",
                         10, 70, 20
@@ -389,14 +476,14 @@ public class DomeCommand implements CommandExecutor {
 
             border.changeSize(20, 0);
 
-            DomeFinalArena.createCircle(world, center);
+            //DomeFinalArena.createCircle(world, center);
 
-            for (Player player : world.getPlayers()) {
+            for (Player player : finalWorld.getPlayers()) {
               player.teleport(new Location(
-                  world,
-                  center.getX(),
-                  center.getY() + 101,
-                  center.getZ()
+                  finalWorld,
+                  finalWorld.getSpawnLocation().getX(),
+                  finalWorld.getSpawnLocation().getY() + 1,
+                  finalWorld.getSpawnLocation().getZ()
               ));
 
               player.sendTitle(
@@ -488,7 +575,6 @@ public class DomeCommand implements CommandExecutor {
       }
 
 
-
       endRound(null);
 
       sender.sendMessage("§cPvP-Runde beendet!");
@@ -545,13 +631,13 @@ public class DomeCommand implements CommandExecutor {
     world.getWorldBorder().setSize(400.0);
 
     Bukkit.getScheduler().runTask(plugin,
-        () -> {if (Bukkit.unloadWorld(world, false)) {
-          world = null;
-        } else {
-          plugin.getLogger().warning("Arena konnte nicht entladen werden!");
-        }});
-
-
+        () -> {
+          if (Bukkit.unloadWorld(world, false)) {
+            world = null;
+          } else {
+            plugin.getLogger().warning("Arena konnte nicht entladen werden!");
+          }
+        });
 
 
     if (winner != null) {
