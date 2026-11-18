@@ -92,6 +92,57 @@ public class DomeCommand implements CommandExecutor {
 
   private final Set<Location> spawnedChests = new HashSet<>();
 
+
+
+
+  private void flattenArea(World world, Location center, int radius, int baseY) {
+    int centerX = center.getBlockX();
+    int centerZ = center.getBlockZ();
+
+    for (int x = centerX - radius; x <= centerX + radius; x++) {
+      for (int z = centerZ - radius; z <= centerZ + radius; z++) {
+
+
+        int dx = x - centerX;
+        int dz = z - centerZ;
+        if (dx * dx + dz * dz > radius * radius) {
+          continue;
+        }
+
+        int highestY = world.getHighestBlockYAt(
+            x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES
+        );
+
+        // Wenn Gelände höher als baseY ist -> nach unten abschneiden
+        if (highestY > baseY) {
+          for (int y = highestY; y > baseY; y--) {
+            world.getBlockAt(x, y, z).setType(Material.AIR, false);
+          }
+        }
+
+        // Wenn Gelände tiefer als baseY ist -> auffüllen
+        if (highestY < baseY) {
+          for (int y = highestY + 1; y < baseY; y++) {
+            world.getBlockAt(x, y, z).setType(Material.DIRT, false);
+          }
+        }
+
+        // Oberfläche setzen
+        world.getBlockAt(x, baseY - 2, z).setType(Material.DIRT, false);
+        world.getBlockAt(x, baseY - 1, z).setType(Material.DIRT, false);
+        world.getBlockAt(x, baseY, z).setType(Material.GRASS_BLOCK, false);
+
+        // bisschen Luftraum freiräumen
+        for (int y = baseY + 1; y <= baseY + 300; y++) {
+          world.getBlockAt(x, y, z).setType(Material.AIR, false);
+        }
+      }
+    }
+  }
+
+
+
+
   private void spawnLootChest(Player player, int phase) {
     ThreadLocalRandom random = ThreadLocalRandom.current();
     Location playerPosition = player.getLocation();
@@ -261,6 +312,23 @@ public class DomeCommand implements CommandExecutor {
 
 
       Location center = world.getSpawnLocation();
+
+
+      int baseY = world.getHighestBlockYAt(
+          center.getBlockX(),
+          center.getBlockZ(),
+          HeightMap.MOTION_BLOCKING_NO_LEAVES
+      );
+
+      flattenArea(world, center, 20, baseY);
+
+// Spawn evtl. neu setzen
+      world.setSpawnLocation(center.getBlockX(), baseY + 1, center.getBlockZ());
+
+
+
+
+
       WorldBorder border = world.getWorldBorder();
 
       // Mittelpunkt exakt auf Blockraster ausrichten
